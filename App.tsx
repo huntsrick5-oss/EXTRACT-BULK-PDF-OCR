@@ -48,10 +48,16 @@ const App: React.FC = () => {
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
         
-        // Add the extracted text to the PDF
-        // Split text into lines that fit the page width
-        const lines = doc.splitTextToSize(extractedText, 180);
-        doc.text(lines, 15, 15);
+        // Set a larger font size for better readability
+        doc.setFontSize(14);
+
+        const margin = 15; // in mm
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const usableWidth = pageWidth - margin * 2;
+        
+        // Add the extracted text to the PDF, with automatic line wrapping
+        const lines = doc.splitTextToSize(extractedText, usableWidth);
+        doc.text(lines, margin, margin);
 
         // Trigger download
         doc.save(`${file.name.replace('.pdf', '')}_extracted.pdf`);

@@ -27,7 +27,7 @@ export const ResultDisplay: React.FC<ResultDisplayProps> = ({ fileName, text, on
                 <textarea
                     readOnly
                     value={text}
-                    className="w-full h-80 p-4 bg-gray-900 border border-gray-600 rounded-md font-mono text-sm resize-y focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full h-80 p-4 bg-gray-900 border border-gray-600 rounded-md font-mono text-base resize-y focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     aria-label="Extracted Text"
                 />
                 <button
