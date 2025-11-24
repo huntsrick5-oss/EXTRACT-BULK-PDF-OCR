@@ -1,71 +1,115 @@
-// Add declaration for jspdf from CDN
+// Add declaration for jspdf and jszip from CDN
 declare const jspdf: any;
+declare const JSZip: any;
 
 import React, { useState } from 'react';
 import { Header } from './components/Header';
 import { Loader } from './components/Loader';
 import { FileUpload } from './components/FileUpload';
-import { ResultDisplay } from './components/ResultDisplay';
+import { BulkResultDisplay, Result } from './components/BulkResultDisplay';
 import { extractTextFromPdf } from './services/geminiService';
 import { fileToBase64 } from './utils/fileUtils';
 
 const App: React.FC = () => {
-    const [file, setFile] = useState<File | null>(null);
-    const [extractedText, setExtractedText] = useState<string | null>(null);
+    const [files, setFiles] = useState<File[] | null>(null);
+    const [results, setResults] = useState<Result[] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [error, setError] = useState<string | null>(null);
 
-    const handleFileSelect = async (selectedFile: File) => {
-        if (selectedFile.type !== 'application/pdf') {
-            setError('Please select a PDF file.');
+    const handleFilesSelect = async (selectedFiles: File[]) => {
+        const pdfFiles = selectedFiles.filter(file => file.type === 'application/pdf');
+        if (pdfFiles.length === 0) {
+            setError('Please select at least one PDF file.');
             return;
         }
-        setFile(selectedFile);
+        
+        setFiles(pdfFiles);
         setError(null);
-        setExtractedText(null);
+        setResults(null);
         setIsLoading(true);
-        setLoadingMessage(`Processing ${selectedFile.name}...`);
+        setLoadingMessage(`Extracting text from ${pdfFiles.length} PDF(s)... This may take a moment.`);
 
         try {
-            const base64Data = await fileToBase64(selectedFile);
-            const text = await extractTextFromPdf({
-                mimeType: selectedFile.type,
-                data: base64Data
+            const processingPromises = pdfFiles.map(async (file) => {
+                const base64Data = await fileToBase64(file);
+                const text = await extractTextFromPdf({
+                    mimeType: file.type,
+                    data: base64Data
+                });
+                return { fileName: file.name, text };
             });
-            setExtractedText(text);
+
+            const newResults = await Promise.all(processingPromises);
+            setResults(newResults);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An unknown error occurred during processing.');
+            setResults(null); // Clear partial results on error
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleDownloadPdf = () => {
-        if (!extractedText || !file) return;
-
-        // Use jsPDF to create a new PDF
+    const createPdfBlob = (text: string): Blob => {
+        const { jsPDF } = jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(14);
+        const margin = 15;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const usableWidth = pageWidth - margin * 2;
+        const lines = doc.splitTextToSize(text, usableWidth);
+        doc.text(lines, margin, margin);
+        return doc.output('blob');
+    };
+    
+    const handleDownloadSinglePdf = (text: string, fileName: string) => {
         const { jsPDF } = jspdf;
         const doc = new jsPDF();
         
-        // Set a larger font size for better readability
         doc.setFontSize(14);
-
-        const margin = 15; // in mm
+        const margin = 15;
         const pageWidth = doc.internal.pageSize.getWidth();
         const usableWidth = pageWidth - margin * 2;
         
-        // Add the extracted text to the PDF, with automatic line wrapping
-        const lines = doc.splitTextToSize(extractedText, usableWidth);
+        const lines = doc.splitTextToSize(text, usableWidth);
         doc.text(lines, margin, margin);
+        
+        doc.save(`${fileName.replace('.pdf', '')}_extracted.pdf`);
+    };
 
-        // Trigger download
-        doc.save(`${file.name.replace('.pdf', '')}_extracted.pdf`);
+    const handleDownloadAllAsZip = async () => {
+        if (!results) return;
+        
+        setLoadingMessage('Creating ZIP file...');
+        setIsLoading(true);
+
+        try {
+            const zip = new JSZip();
+            results.forEach(result => {
+                const pdfBlob = createPdfBlob(result.text);
+                const newFileName = `${result.fileName.replace('.pdf', '')}_extracted.pdf`;
+                zip.file(newFileName, pdfBlob);
+            });
+            
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(zipBlob);
+            link.download = 'pdf_extracts.zip';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+        } catch(err) {
+            setError(err instanceof Error ? err.message : 'Could not create ZIP file.');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleClear = () => {
-        setFile(null);
-        setExtractedText(null);
+        setFiles(null);
+        setResults(null);
         setError(null);
         setIsLoading(false);
     };
@@ -85,18 +129,18 @@ const App: React.FC = () => {
             );
         }
 
-        if (extractedText && file) {
+        if (results) {
             return (
-                <ResultDisplay
-                    fileName={file.name}
-                    text={extractedText}
-                    onDownload={handleDownloadPdf}
+                <BulkResultDisplay
+                    results={results}
+                    onDownloadSingle={handleDownloadSinglePdf}
+                    onDownloadAll={handleDownloadAllAsZip}
                     onClear={handleClear}
                 />
             );
         }
 
-        return <FileUpload onFileSelect={handleFileSelect} disabled={isLoading} />;
+        return <FileUpload onFileSelect={handleFilesSelect} disabled={isLoading} />;
     };
 
     return (

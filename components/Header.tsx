@@ -6,7 +6,7 @@ export const Header: React.FC = () => (
       PDF OCR Extractor
     </h1>
     <p className="text-lg text-gray-400 max-w-2xl mx-auto">
-      Extract text from your PDFs with AI and download a simple, text-based version.
+      Extract text from your PDFs with AI in under 20 seconds. Get a simple, text-based version in a flash.
     </p>
   </header>
 );
